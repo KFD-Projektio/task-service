@@ -10,7 +10,6 @@ import ru.projektio.taskservice.database.entity.TaskEntity
 import ru.projektio.taskservice.database.repository.BoardTaskDao
 import ru.projektio.taskservice.database.repository.TaskDao
 import ru.projektio.taskservice.dto.request.CreateTaskDtoRequest
-import ru.projektio.taskservice.dto.request.GetTasksData
 import ru.projektio.taskservice.dto.request.UpdateTaskRequest
 import ru.projektio.taskservice.dto.response.CreateTaskDtoResponse
 import ru.projektio.taskservice.dto.response.TaskInfoResponse
@@ -25,19 +24,14 @@ class TaskServiceImpl(
     private val boardServiceClient: BoardServiceClient,
     private val boardTaskDao: BoardTaskDao
 ) : TaskService {
-    override fun getTasks(userId: Long, getTaskRequest: GetTasksData): List<TaskInfoResponse> {
-        val columnInfo = boardServiceClient.getColumnInfo(getTaskRequest.columnId).body ?: throw BoardClientException("Request Error")
-        val boardInfo = boardServiceClient.getBoardInfo(columnInfo.boardId).body ?: throw BoardClientException("Request Error")
+    override fun getTasks(userId: Long, boardId: Long): List<TaskInfoResponse> {
+        val boardInfo = boardServiceClient.getBoardInfo(boardId).body ?: throw BoardClientException("Request Error")
 
-        if (getTaskRequest.columnId !in boardInfo.columnsIds) {
-            throw BoardClientException("Wrong board or column")
-        }
         if (userId !in boardInfo.userIds) {
             throw RestrictedUserException("User not allowed")
         }
 
-        return taskDao.findAllByColumnId(getTaskRequest.columnId).map { task -> TaskInfoResponse.from(task)}
-
+        return taskDao.findAllByBoardId(boardInfo.id).map { task -> TaskInfoResponse.from(task)}
     }
 
 
@@ -93,5 +87,17 @@ class TaskServiceImpl(
         taskDao.save(task)
 
         return TaskInfoResponse.from(task)
+    }
+
+    override fun deleteTask(userId: Long, taskId: Long): Unit {
+        val task = taskDao.findById(taskId).orElseThrow { NoContentException("Task not found") }
+
+        val boardInfo = boardServiceClient.getBoardInfo(task.boardId).body ?: throw BoardClientException("Request Error")
+
+        if (userId !in boardInfo.userIds) {
+            throw RestrictedUserException("User not allowed")
+        }
+
+        taskDao.delete(task)
     }
 }

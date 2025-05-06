@@ -7,7 +7,8 @@ import ru.projektio.taskservice.dto.response.CreateTaskDtoResponse
 import ru.projektio.taskservice.dto.response.TaskInfoResponse
 
 interface TaskService {
-    fun getTasks(userId: Long, getTaskRequest: GetTasksData): List<TaskInfoResponse>
+    fun getTasks(userId: Long, boardId: Long): List<TaskInfoResponse>
     fun createTask(userId: Long, taskData: CreateTaskDtoRequest): CreateTaskDtoResponse
     fun updateTask(userId: Long, taskId: Long, taskDataToUpdate: UpdateTaskRequest): TaskInfoResponse
+    fun deleteTask(userId: Long, taskId: Long): Unit
 }
