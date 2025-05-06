@@ -15,10 +15,10 @@ class TaskController(
     private val taskService: TaskService,
 ) {
     @GetMapping
-    fun getTasks(@RequestHeader userId: Long, getTasksData: GetTasksData): ResponseEntity<List<TaskInfoResponse>> =
+    fun getTasks(@RequestHeader("X-User-Id") userId: Long, @RequestBody getTasksData: GetTasksData): ResponseEntity<List<TaskInfoResponse>> =
         ResponseEntity.status(HttpStatus.OK).body(taskService.getTasks(userId, getTasksData))
 
     @PostMapping
-    fun createTask(@RequestHeader userId: Long, @RequestBody taskData: CreateTaskDtoRequest) : ResponseEntity<CreateTaskDtoResponse>
+    fun createTask(@RequestHeader("X-User-Id") userId: Long, @RequestBody taskData: CreateTaskDtoRequest) : ResponseEntity<CreateTaskDtoResponse>
     = ResponseEntity.status(HttpStatus.CREATED).body(taskService.createTask(userId, taskData))
 }
