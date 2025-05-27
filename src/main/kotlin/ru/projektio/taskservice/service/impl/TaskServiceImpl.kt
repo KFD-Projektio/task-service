@@ -1,6 +1,5 @@
 package ru.projektio.taskservice.service.impl
 
-//import org.springframework.transaction.annotation.Transactional
 import jakarta.transaction.Transactional
 import jakarta.ws.rs.core.NoContentException
 import org.springframework.stereotype.Service
@@ -24,29 +23,18 @@ class TaskServiceImpl(
     private val boardServiceClient: BoardServiceClient,
     private val boardTaskDao: BoardTaskDao
 ) : TaskService {
+
     override fun getTasks(userId: Long, boardId: Long): List<TaskInfoResponse> {
-        val boardInfo = boardServiceClient.getBoardInfo(boardId).body ?: throw BoardClientException("Request Error")
-
-        if (userId !in boardInfo.userIds) {
-            throw RestrictedUserException("User not allowed")
-        }
-
-        return taskDao.findAllByBoardId(boardInfo.id).map { task -> TaskInfoResponse.from(task)}
+        val boardInfo = getBoardInfoOrThrow(boardId)
+        checkUserAccess(userId, boardInfo.userIds)
+        return taskDao.findAllByBoardId(boardInfo.id).map(TaskInfoResponse::from)
     }
 
-
     @Transactional
-    override fun createTask(userId:Long, taskData: CreateTaskDtoRequest): CreateTaskDtoResponse {
-        val boardInfo = boardServiceClient.getBoardInfo(taskData.boardId).body ?: throw BoardClientException("Request Error")
-
-        if (taskData.boardId != boardInfo.id || taskData.columnId !in boardInfo.columnsIds) {
-            throw BoardClientException("Wrong board or column")
-        }
-
-        if (userId !in boardInfo.userIds) {
-            throw RestrictedUserException("User not allowed")
-        }
-
+    override fun createTask(userId: Long, taskData: CreateTaskDtoRequest): CreateTaskDtoResponse {
+        val boardInfo = getBoardInfoOrThrow(taskData.boardId)
+        checkUserAccess(userId, boardInfo.userIds)
+        checkColumnAccess(taskData.columnId, boardInfo.columnsIds)
 
         val task = TaskEntity(
             title = taskData.title,
@@ -59,45 +47,49 @@ class TaskServiceImpl(
             deadline = LocalDateTime.now()
         )
 
-        val boardTaskEntity = BoardTaskEntity(
-            taskId = task.id,
-            boardId = task.boardId,
-        )
-
-        boardTaskDao.save(boardTaskEntity)
         taskDao.save(task)
+        boardTaskDao.save(BoardTaskEntity(taskId = task.id, boardId = task.boardId))
 
         return CreateTaskDtoResponse.from(task)
     }
 
     @Transactional
     override fun updateTask(userId: Long, taskId: Long, taskDataToUpdate: UpdateTaskRequest): TaskInfoResponse {
-
-        val task = taskDao.findById(taskId).orElseThrow { NoContentException("Task not found") }
-        val boardInfo = boardServiceClient.getBoardInfo(task.boardId).body ?: throw BoardClientException("Request Error")
-
-        if (userId !in boardInfo.userIds) {
-            throw RestrictedUserException("User not allowed")
-        }
+        val task = getTaskOrThrow(taskId)
+        val boardInfo = getBoardInfoOrThrow(task.boardId)
+        checkUserAccess(userId, boardInfo.userIds)
 
         task.title = taskDataToUpdate.title ?: task.title
         task.description = taskDataToUpdate.description ?: task.description
         task.assigneeId = taskDataToUpdate.assigneeId ?: task.assigneeId
 
         taskDao.save(task)
-
         return TaskInfoResponse.from(task)
     }
 
-    override fun deleteTask(userId: Long, taskId: Long): Unit {
-        val task = taskDao.findById(taskId).orElseThrow { NoContentException("Task not found") }
+    @Transactional
+    override fun deleteTask(userId: Long, taskId: Long) {
+        val task = getTaskOrThrow(taskId)
+        val boardInfo = getBoardInfoOrThrow(task.boardId)
+        checkUserAccess(userId, boardInfo.userIds)
+        taskDao.delete(task)
+    }
 
-        val boardInfo = boardServiceClient.getBoardInfo(task.boardId).body ?: throw BoardClientException("Request Error")
+    private fun getBoardInfoOrThrow(boardId: Long) =
+        boardServiceClient.getBoardInfo(boardId).body ?: throw BoardClientException("Request Error")
 
-        if (userId !in boardInfo.userIds) {
+    private fun getTaskOrThrow(taskId: Long) =
+        taskDao.findById(taskId).orElseThrow { NoContentException("Task not found") }
+
+    private fun checkUserAccess(userId: Long, userIds: List<Long>) {
+        if (userId !in userIds) {
             throw RestrictedUserException("User not allowed")
         }
+    }
 
-        taskDao.delete(task)
+    private fun checkColumnAccess(columnId: Long, columnIds: List<Long>) {
+        if (columnId !in columnIds) {
+            throw BoardClientException("Invalid column for the board")
+        }
     }
 }
